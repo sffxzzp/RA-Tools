@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IC Report Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface: #1e293b;
+            --surface-hover: #334155;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text);
+            line-height: 1.6;
+            height: 100vh;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .left-panel {
+            width: 50%;
+            padding: 2rem;
+            overflow-y: auto;
+            border-right: 1px solid var(--border);
+        }
+
+        .right-panel {
+            width: 50%;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-color);
+        }
+
+        .header {
+            margin-bottom: 2rem;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 2.25rem;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+			background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .app-container {
+                flex-direction: column;
+                overflow-y: auto;
+                height: auto;
+            }
+            body {
+                overflow: auto;
+                height: auto;
+            }
+            .left-panel, .right-panel {
+                width: 100%;
+                height: auto;
+                border-right: none;
+            }
+            .right-panel {
+                min-height: 500px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .left-panel, .right-panel {
+                padding: 1rem;
+            }
+            .header h1 {
+                font-size: 1.75rem;
+            }
+            .grid-2-col, .grid-3-col {
+                grid-template-columns: 1fr !important;
+            }
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        input[type="text"], input[type="datetime-local"], select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 0.875rem;
+            transition: border-color 0.2s, outline 0.2s;
+        }
+
+        input:focus, textarea:focus {
+            border-color: var(--primary);
+            outline: 2px solid rgba(99, 102, 241, 0.2);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+            font-family: inherit;
+        }
+
+        .file-upload {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            text-align: center;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .file-upload:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .file-upload input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-upload-icon {
+            font-size: 2rem;
+            color: var(--primary);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            background: var(--primary);
+            color: white;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: var(--surface-hover);
+            color: var(--text);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .tag-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--surface);
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tag {
+            background: var(--primary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .tag:hover {
+            background: var(--primary-hover);
+        }
+
+        .output-card {
+            background: var(--surface-hover);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            white-space: pre-wrap;
+            font-size: 0.875rem;
+            border-left: 4px solid var(--primary);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Configuration Section -->
+        <div class="left-panel">
+            <div class="header">
+                <h1>IC Report Generator</h1>
+                <p style="color: var(--text-muted)">A local, pure web-based tool for Intentional Conversations.</p>
+            </div>
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h2>1. Load Data Files</h2>
+                <div class="grid-2-col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="file-upload" id="cm-upload-box">
+                        <div class="file-upload-icon">📄</div>
+                        <div style="font-weight: 500;">Community Members (CM)</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);" id="cm-status">Click to load CM.csv</div>
+                        <input type="file" id="cm-file" accept=".csv">
+                    </div>
+                    <div class="file-upload" id="ic-upload-box">
+                        <div class="file-upload-icon">📊</div>
+                        <div style="font-weight: 500;">Intentional Conversations (IC)</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);" id="ic-status">Click to load IC.csv</div>
+                        <input type="file" id="ic-file" accept=".csv">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h2>2. RA Settings</h2>
+                <div class="grid-2-col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>RA First Name</label>
+                        <input type="text" id="ra-first" value="">
+                    </div>
+                    <div class="form-group">
+                        <label>RA Last Name</label>
+                        <input type="text" id="ra-last" value="">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Building / Location</label>
+                    <select id="building-name">
+                        <option value="beg">Begin Tower</option>
+                        <option value="eas">East Hall</option>
+                    </select>
+                </div>
+                <!-- Attempt Times -->
+                <div class="grid-3-col" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                    <div class="form-group">
+                        <label>Attempt 1 Time</label>
+                        <input type="datetime-local" id="attempt1-time" value="2026-02-09T20:00">
+                    </div>
+                    <div class="form-group">
+                        <label>Attempt 2 Time</label>
+                        <input type="datetime-local" id="attempt2-time" value="2026-02-16T22:00">
+                    </div>
+                    <div class="form-group">
+                        <label>Attempt 3 Time</label>
+                        <input type="datetime-local" id="attempt3-time" value="2026-02-20T11:00">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h2>3. Template Editor</h2>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                    Use curly braces <code>{{ Variable }}</code> to insert dynamic data. Upload the IC.csv to see available form question variables.
+                </p>
+                <div class="tag-container" id="variable-tags" style="margin-bottom: 1rem;">
+                    <span class="tag" onclick="insertTag('resident_first')">+ resident_first</span>
+                    <span class="tag" onclick="insertTag('resident_last')">+ resident_last</span>
+                    <span class="tag" onclick="insertTag('room')">+ room</span>
+                    <span class="tag" onclick="insertTag('ra_first')">+ ra_first</span>
+                    <span class="tag" onclick="insertTag('ra_last')">+ ra_last</span>
+                    <span class="tag" onclick="insertTag('date')">+ date</span>
+                    <span class="tag" onclick="insertTag('time')">+ time</span>
+                </div>
+                
+                <h3 style="font-size: 1rem; margin: 1.5rem 0 0.5rem 0; color: var(--text-muted); padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);">Attempt History Snippets</h3>
+                <div class="form-group">
+                    <label>Attempt 1 Snippet (Used if missed Attempt 1)</label>
+                    <textarea id="template-attempt1" style="min-height: 160px;">
+On or about {{ attempt1_date }} at or around {{ attempt1_time }}HRS, at SAIT Residence {{ building_name }}.</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Attempt 2 Snippet (Used if missed Attempt 2)</label>
+                    <textarea id="template-attempt2" style="min-height: 160px;">
+On or about {{ attempt2_date }} at or around {{ attempt2_time }}HRS, at SAIT Residence {{ building_name }}.</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Attempt 3 Snippet (Used if missed Attempt 3)</label>
+                    <textarea id="template-attempt3" style="min-height: 160px;">
+On or about {{ attempt3_date }} at or around {{ attempt3_time }}HRS, at SAIT Residence {{ building_name }}.</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Responded Template (Match Found)</label>
+                    <textarea id="template-main" style="min-height: 250px;">{{ date }} {{ time }}HRS
+{{ resident_last }}, {{ resident_first }} (Resident {{ room }})
+
+{{ attempt_history }}
+On or about {{ date }} at or around {{ time }}HRS, at SAIT Residence {{ building_name }}.
+[Example Question placeholder: They answered {{ How are you feeling today? }}]
+
+[answer 1-5 comma separated, for userscript to use]</textarea>
+                </div>
+            </div>
+
+            <button class="btn" id="generate-btn" style="font-size: 1.1rem; padding: 1rem;">Generate Reports</button>
+        </div>
+
+        <!-- Output Section -->
+        <div class="right-panel">
+            <div class="card" style="height: 100%; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="border: none; margin: 0; padding: 0;">Output Results</h2>
+                    <button class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;" onclick="copyAll()">Copy All to Clipboard</button>
+                </div>
+                
+                <div id="output-container" style="flex: 1; overflow-y: auto;">
+                    <div style="color: var(--text-muted); text-align: center; margin-top: 3rem;">
+                        Upload data and click Generate to see reports here.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let cmData = [];
+        let icData = [];
+        let icHeaders = [];
+        let lastFocusedTextarea = null;
+
+        // Constants
+        const DEFAULT_TAGS = [
+            'resident_first', 'resident_last',
+            'room', 'ra_first', 'ra_last', 'date', 'time',
+            'building_name', 'attempt1_date', 'attempt1_time', 
+            'attempt2_date', 'attempt2_time', 'attempt3_date', 
+            'attempt3_time', 'attempt3_full_date', 'attempt_history'
+        ];
+        const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+        // Initialization
+        function init() {
+            document.getElementById('cm-file').addEventListener('change', (e) => handleFileUpload(e, 'cm'));
+            document.getElementById('ic-file').addEventListener('change', (e) => handleFileUpload(e, 'ic'));
+            document.getElementById('generate-btn').addEventListener('click', generateReports);
+
+            lastFocusedTextarea = document.getElementById('template-main');
+            document.querySelectorAll('textarea').forEach(ta => {
+                ta.addEventListener('focus', function() {
+                    lastFocusedTextarea = this;
+                });
+            });
+        }
+
+        // File Handling
+        function handleFileUpload(e, type) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const boxId = `${type}-upload-box`;
+            const statusId = `${type}-status`;
+            
+            document.getElementById(statusId).textContent = file.name;
+            document.getElementById(boxId).style.borderColor = 'var(--success)';
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                transformHeader: function(h) {
+                    return h.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+                },
+                complete: function(results) {
+                    if (type === 'cm') {
+                        cmData = results.data;
+                    } else if (type === 'ic') {
+                        icData = results.data;
+                        if (results.meta.fields) {
+                            icHeaders = results.meta.fields;
+                            updateDynamicTags();
+                        }
+                    }
+                }
+            });
+        }
+
+        // Tag UI
+        function updateDynamicTags() {
+            const container = document.getElementById('variable-tags');
+            container.innerHTML = '';
+            
+            DEFAULT_TAGS.forEach(tag => container.appendChild(createTagElement(tag, false)));
+
+            icHeaders.forEach(header => {
+                if (header && header.trim() !== "") {
+                    container.appendChild(createTagElement(header, true));
+                }
+            });
+        }
+
+        function createTagElement(tag, isCustom) {
+            const span = document.createElement('span');
+            span.className = 'tag';
+            span.textContent = '+ ' + (isCustom ? `[${tag.length > 20 ? tag.substring(0, 20) + '...' : tag}]` : tag);
+            span.title = tag;
+            if (isCustom) span.style.background = '#475569';
+            span.onclick = () => insertTag(tag);
+            return span;
+        }
+
+        function insertTag(tag) {
+            const textarea = lastFocusedTextarea || document.getElementById('template-main');
+            const cursorPos = textarea.selectionStart;
+            const textToInsert = `{{ ${tag} }}`;
+            const textBefore = textarea.value.substring(0, cursorPos);
+            const textAfter = textarea.value.substring(cursorPos);
+            
+            textarea.value = textBefore + textToInsert + textAfter;
+            
+            // Restore cursor position to right after the inserted tag
+            const newPos = cursorPos + textToInsert.length;
+            textarea.setSelectionRange(newPos, newPos);
+            textarea.focus();
+        }
+
+        // Formatting Helpers
+        function formatAttemptTime(dateTimeId) {
+            const val = document.getElementById(dateTimeId).value;
+            if (!val) return { fullDate: 'Unknown Date', time: 'Unknown', ordinalDate: 'Unknown Date', dateObj: null };
+            
+            const d = new Date(val);
+            if (isNaN(d)) return { fullDate: 'Unknown Date', time: 'Unknown', ordinalDate: 'Unknown Date', dateObj: null };
+
+            const date = d.getDate();
+            let suffix = "th";
+            if (date % 10 === 1 && date !== 11) suffix = "st";
+            else if (date % 10 === 2 && date !== 12) suffix = "nd";
+            else if (date % 10 === 3 && date !== 13) suffix = "rd";
+
+            const timeStr = d.getHours().toString().padStart(2, '0') + d.getMinutes().toString().padStart(2, '0');
+            return {
+                fullDate: `${MONTHS[d.getMonth()]} ${date}, ${d.getFullYear()}`,
+                time: timeStr,
+                ordinalDate: `${MONTHS[d.getMonth()]} ${date}${suffix}`,
+                dateObj: d
+            };
+        }
+
+        function renderTemplate(template, data) {
+            return template.replace(/\{\{\s*(.*?)\s*\}\}/g, (match, key) => data[key] !== undefined ? data[key] : `[Missing: ${key}]`);
+        }
+
+        // Generation Logic
+        function extractCompletionTime(matchedIC) {
+            if (!matchedIC) return null;
+            const timeKeys = ['Completion time', 'Timestamp', icHeaders[2] || ''];
+            for (let key of timeKeys) {
+                if (matchedIC[key]) {
+                    const d = new Date(matchedIC[key]);
+                    if (!isNaN(d)) return d;
+                }
+            }
+            return null;
+        }
+
+        function buildAttemptHistory(variables, completionDateObj, attempts) {
+            const historyParts = [];
+            const [a1, a2, a3] = attempts;
+            
+            const tx1 = document.getElementById('template-attempt1').value;
+            const tx2 = document.getElementById('template-attempt2').value;
+            const tx3 = document.getElementById('template-attempt3').value;
+
+            const isFailed = (attemptDate) => attemptDate && (!completionDateObj || isNaN(completionDateObj) || completionDateObj > attemptDate);
+
+            if (isFailed(a1.dateObj)) historyParts.push(renderTemplate(tx1, variables));
+            if (isFailed(a2.dateObj)) historyParts.push(renderTemplate(tx2, variables));
+            if (isFailed(a3.dateObj)) historyParts.push(renderTemplate(tx3, variables));
+
+            return historyParts.join("\n");
+        }
+
+        function generateReports() {
+            if (cmData.length === 0) {
+                alert("Please upload Resident List (CM.csv) first.");
+                return;
+            }
+
+            const outputContainer = document.getElementById('output-container');
+            outputContainer.innerHTML = '';
+
+            const raFirst = document.getElementById('ra-first').value;
+            const raLast = document.getElementById('ra-last').value;
+            const raLastUpper = raLast.toUpperCase();
+            
+            const buildingCode = document.getElementById('building-name').value;
+             let building = 'Begin Tower (151 Dr Carpenter Circle NW, Calgary AB, T2M 3G1)';
+             if (buildingCode === 'eas') {
+                 building = 'EAST Hall (136 Dr Carpenter Circle NW, Calgary, AB T2M 4W7)';
+             }
+
+            const templateMain = document.getElementById('template-main').value;
+            const templateNone = `{{ attempt3_full_date }} {{ attempt3_time }}HRS
+IC #3 - {{ resident_last }}, {{ resident_first }} (Resident {{ room }})
+
+{{ attempt_history }}
+
+0,0,0,0,0`;
+
+            const attempts = [
+                formatAttemptTime('attempt1-time'),
+                formatAttemptTime('attempt2-time'),
+                formatAttemptTime('attempt3-time')
+            ];
+
+            let matchedCount = 0;
+
+            cmData.forEach(resident => {
+                const residentFirst = resident['First Name'] || resident['FirstName'] || '';
+                const residentLast = resident['Last Name'] || resident['LastName'] || '';
+                if (!residentFirst && !residentLast) return; 
+
+                const room = resident['Room'] || 'Unknown';
+                
+                // Flexible matching heuristic
+                const matchedIC = icData.find(ic => {
+                    const rowValues = Object.values(ic).join(' ').toLowerCase();
+                    return (residentFirst && rowValues.includes(residentFirst.toLowerCase().substring(0,4))) || 
+                           (residentLast && rowValues.includes(residentLast.toLowerCase().substring(0,5)));
+                });
+
+                let variables = {
+                    'resident_first': residentFirst,
+                    'resident_last': residentLast.toUpperCase(),
+                    'room': room,
+                    'ra_first': raFirst,
+                    'ra_last': raLastUpper,
+                    'building_name': building,
+                    'date': 'Unknown Date',
+                    'time': 'Unknown Time',
+                    'attempt1_date': attempts[0].ordinalDate,
+                    'attempt1_time': attempts[0].time,
+                    'attempt2_date': attempts[1].ordinalDate,
+                    'attempt2_time': attempts[1].time,
+                    'attempt3_date': attempts[2].ordinalDate,
+                    'attempt3_time': attempts[2].time,
+                    'attempt3_full_date': attempts[2].fullDate
+                };
+
+                let finalOutput = "";
+                const completionDateObj = extractCompletionTime(matchedIC);
+                
+                // Set success date variables if available
+                if (completionDateObj) {
+                    variables['date'] = completionDateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                    variables['time'] = completionDateObj.getHours().toString().padStart(2, '0') + completionDateObj.getMinutes().toString().padStart(2, '0');
+                }
+
+                // Inject dynamic IC fields
+                if (matchedIC) {
+                    matchedCount++;
+                    for (const [key, value] of Object.entries(matchedIC)) {
+                        variables[key] = value;
+                    }
+                }
+
+                // Generate history block
+                variables['attempt_history'] = buildAttemptHistory(variables, completionDateObj, attempts);
+
+                // Render final text
+                finalOutput = renderTemplate(matchedIC ? templateMain : templateNone, variables);
+
+                const card = document.createElement('div');
+                card.className = 'output-card';
+                card.textContent = finalOutput;
+                outputContainer.appendChild(card);
+            });
+
+            // Summary UI
+            const summary = document.createElement('div');
+            summary.style.color = 'var(--success)';
+            summary.style.marginBottom = '1rem';
+            summary.style.fontWeight = 'bold';
+            summary.textContent = `Processed ${cmData.length} residents. ${matchedCount} matched with form responses.`;
+            outputContainer.prepend(summary);
+        }
+
+        // Global UI Action
+        function copyAll() {
+            const val = Array.from(document.querySelectorAll('.output-card')).map(el => el.textContent).join('\n\n--------------------\n\n');
+            navigator.clipboard.writeText(val).then(() => alert('Copied all outputs to clipboard!'));
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

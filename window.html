@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RA Window Report Tool</title>
+    <style>
+:root { --primary: #4f46e5; --primary-hover: #4338ca; --bg-dark: #0f172a; --bg-panel: #1e293b; --text-main: #f8fafc; --text-muted: #94a3b8; --border: #334155; --input-bg: #334155; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', sans-serif; background-color: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; }
+.app-container { display: flex; height: 100vh; }
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-dark); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+.form-panel { width: 50%; padding: 2rem; overflow-y: auto; border-right: 1px solid var(--border); }
+.form-panel header { margin-bottom: 2rem; }
+.form-panel h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+.form-panel p { color: var(--text-muted); font-size: 0.9rem; }
+.form-section { margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+.form-section:last-child { border-bottom: none; }
+.form-section h2 { font-size: 1.1rem; font-weight: 500; margin-bottom: 1rem; color: var(--text-main); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+input, select { width: 100%; padding: 0.6rem 0.8rem; background-color: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text-main); font-family: inherit; font-size: 0.95rem; transition: border-color 0.2s; }
+input:focus, select:focus { outline: none; border-color: var(--primary); }
+.step-card { background-color: #252f45; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border); }
+.step-card h3 { font-size: 0.95rem; margin-bottom: 0.8rem; color: var(--primary); }
+.output-panel { width: 50%; background-color: #111827; padding: 2rem; display: flex; flex-direction: column; }
+.output-container { background-color: var(--bg-panel); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 100%; display: flex; flex-direction: column; }
+.output-container h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+.report-content { flex-grow: 1; white-space: pre-wrap; font-family: 'Courier New', Courier, monospace; line-height: 1.6; color: #e2e8f0; overflow-y: auto; outline: none; font-size: 0.95rem; }
+.primary-btn { margin-top: 1rem; padding: 0.8rem 1.5rem; background-color: var(--primary); color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; align-self: flex-start; }
+.primary-btn:hover { background-color: var(--primary-hover); }
+@media (max-width: 768px) { .app-container { flex-direction: column; overflow-y: auto; height: auto; } body { overflow-y: auto; } .form-panel, .output-panel { width: 100%; height: auto; } .output-panel { min-height: 500px; } }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Side: Form -->
+        <div class="form-panel">
+            <header>
+                <h1>RA Incident Reporter</h1>
+                <p>Generate Window Open reports efficiently.</p>
+            </header>
+            <form id="reportForm">
+                <!-- Section: General Info -->
+                <div class="form-section">
+                    <h2>General Information</h2>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="date">Date</label>
+                            <input type="date" id="date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="time">Time</label>
+                            <input type="time" id="time" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <select id="location">
+                            <option value="begin">Begin Tower</option>
+                            <option value="east">East Hall</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="temperature">Outside Temp (°C)</label>
+                        <input type="number" id="temperature" placeholder="e.g. 15">
+                    </div>
+                </div>
+                <!-- Section: People -->
+                <div class="form-section">
+                    <h2>People Involved</h2>
+                    <p style="font-size: 0.85rem; color: var(--primary); margin-bottom: 1rem; margin-top: -0.5rem;">Note: Person 1 will act as the primary point of contact in drafting the report.</p>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="ra1First">Person 1 First Name</label>
+                            <input type="text" id="ra1First" placeholder="First">
+                        </div>
+                        <div class="form-group">
+                            <label for="ra1Last">Person 1 Last Name</label>
+                            <input type="text" id="ra1Last" placeholder="Last (e.g. Smith)">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="ra1Role">Person 1 Role</label>
+                        <input type="text" id="ra1Role" placeholder="e.g. Resident Advisor">
+                    </div>
+                    
+                     <div class="grid-2">
+                        <div class="form-group">
+                            <label for="ra2First">Person 2 First Name (Optional)</label>
+                            <input type="text" id="ra2First" placeholder="First">
+                        </div>
+                        <div class="form-group">
+                            <label for="ra2Last">Person 2 Last Name (Optional)</label>
+                            <input type="text" id="ra2Last" placeholder="Last">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="ra2Role">Person 2 Role (Optional)</label>
+                        <input type="text" id="ra2Role" placeholder="e.g. Resident Advisor">
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="resFirst">Resident First Name</label>
+                            <input type="text" id="resFirst" placeholder="First">
+                        </div>
+                        <div class="form-group">
+                            <label for="resLast">Resident Last Name</label>
+                            <input type="text" id="resLast" placeholder="Last">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="room">Room Number</label>
+                        <input type="text" id="room" placeholder="e.g. BEG-101-1">
+                    </div>
+                </div>
+                <!-- Section: Steps -->
+                <div class="form-section">
+                    <h2>Action Steps</h2>
+                    
+                    <!-- Step 1 -->
+                    <div class="step-card">
+                        <h3>1. Phone Call</h3>
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label for="step1First">Caller First Name</label>
+                                <input type="text" id="step1First" placeholder="First">
+                            </div>
+                            <div class="form-group">
+                                <label for="step1Last">Caller Last Name</label>
+                                <input type="text" id="step1Last" placeholder="Last">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="step1Role">Caller Role</label>
+                            <input type="text" id="step1Role" placeholder="e.g. Front Desk (Optional)">
+                        </div>
+                        <div class="form-group">
+                            <label for="timePhone">Time of Call</label>
+                            <input type="time" id="timePhone">
+                        </div>
+                        <div class="form-group">
+                            <label for="notePhone">Outcome / Note</label>
+                            <select id="notePhone">
+                                <option value="answered">Student answered</option>
+                                <option value="closed">Student closed window</option>
+                                <option value="noAnswer" selected>Did not answer</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Step 2 -->
+                    <div class="step-card">
+                        <h3>2. Knock on Door</h3>
+                        <div class="form-group">
+                            <label for="timeKnock">Time of Knock</label>
+                            <input type="time" id="timeKnock">
+                        </div>
+                         <div class="form-group">
+                            <label for="typeKnock">Knocked On</label>
+                            <select id="typeKnock">
+                                <option value="suite">Suite Door</option>
+                                <option value="bedroom">Bedroom Door</option>
+                                <option value="both" selected>Both</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="noteKnock">Outcome</label>
+                            <select id="noteKnock">
+                                <option value="noResponse" selected>No response</option>
+                                <option value="answered">Student answered</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Step 3 -->
+                    <div class="step-card">
+                        <h3>3. Room Entry</h3>
+                        <div class="form-group">
+                            <label for="timeEntry">Time of Entry</label>
+                            <input type="time" id="timeEntry">
+                        </div>
+                        <div class="form-group">
+                            <label for="noteEntry">Observation</label>
+                             <input type="text" id="noteEntry" placeholder="e.g. Student not present, or sleeping...">
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <!-- Right Side: Output -->
+        <div class="output-panel">
+            <div class="output-container">
+                <h2>Generated Report</h2>
+                <div id="outputContent" class="report-content" contenteditable="true">
+                    <!-- Text will be generated here -->
+                </div>
+                <button id="copyBtn" class="primary-btn">Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Inputs
+    const inputs = document.querySelectorAll('input, select');
+    const outputContent = document.getElementById('outputContent');
+    const copyBtn = document.getElementById('copyBtn');
+    // Add event listeners
+    inputs.forEach(input => {
+        input.addEventListener('input', updateReport);
+    });
+    // Set default date to today
+    document.getElementById('date').valueAsDate = new Date();
+    
+    // Initial update
+    updateReport();
+    // Copy to clipboard
+    copyBtn.addEventListener('click', () => {
+        const textToCopy = outputContent.innerText;
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            const originalText = copyBtn.innerText;
+            copyBtn.innerText = "Copied!";
+            setTimeout(() => {
+                copyBtn.innerText = originalText;
+            }, 2000);
+        });
+    });
+    function updateReport() {
+        // --- 1. Gather Data ---
+        const dateRaw = document.getElementById('date').value;
+        const timeRaw = document.getElementById('time').value;
+        const location = document.getElementById('location').value;
+        const temp = document.getElementById('temperature').value;
+        
+        const ra1First = document.getElementById('ra1First').value.trim();
+        const ra1Last = document.getElementById('ra1Last').value.trim();
+        const ra1Role = document.getElementById('ra1Role').value.trim() || "Resident Advisor";
+        const ra2First = document.getElementById('ra2First').value.trim();
+        const ra2Last = document.getElementById('ra2Last').value.trim();
+        const ra2Role = document.getElementById('ra2Role').value.trim() || "Resident Advisor";
+        
+        const resFirst = document.getElementById('resFirst').value.trim();
+        const resLast = document.getElementById('resLast').value.trim();
+        const room = document.getElementById('room').value.trim();
+        // Steps
+        const step1First = document.getElementById('step1First').value.trim();
+        const step1Last = document.getElementById('step1Last').value.trim();
+        const step1Role = document.getElementById('step1Role').value.trim();
+        
+        const timePhone = document.getElementById('timePhone').value;
+        const notePhone = document.getElementById('notePhone').value;
+        
+        const timeKnock = document.getElementById('timeKnock').value;
+        const typeKnock = document.getElementById('typeKnock').value; // suite, bedroom, both
+        const noteKnock = document.getElementById('noteKnock').value;
+        const timeEntry = document.getElementById('timeEntry').value;
+        const noteEntry = document.getElementById('noteEntry').value.trim();
+        // --- 2. Format Data ---
+        
+        // Time formatting: "1234HRS" (from "12:34")
+        const formatTime = (t) => {
+            if (!t) return "TIME";
+            return t.replace(':', '') + "HRS";
+        };
+        // Date formatting
+        let dateFormatted = "DATE";
+        if (dateRaw) {
+            const d = new Date(dateRaw + 'T12:00:00');
+            const options = { month: 'long', day: 'numeric', year: 'numeric' };
+            dateFormatted = d.toLocaleDateString('en-US', options);
+        }
+        let timeFormatted = formatTime(timeRaw);
+        // Location Details
+        let address = "Unknown Address";
+        let towerName = "Unknown Tower";
+        
+        if (location === 'begin') {
+            towerName = "Begin Tower";
+            address = "151 Dr Carpenter Circle NW, Calgary AB, T2M 3G1";
+        } else if (location === 'east') {
+            towerName = "East Hall";
+            address = "136 Dr Carpenter Circle NW, Calgary, AB T2M 4W7"; 
+        }
+        // Name Formatting Helpers
+        const formatName = (first, last, roleTitle, isFirstMention) => {
+            if (!last) return "LAST";
+            const lastUpper = last.toUpperCase();
+            if (isFirstMention) {
+                // Modified: Used string concatenation to be Deno-safe
+                return lastUpper + ", " + (first || 'First') + " (" + roleTitle + ")"; 
+            } else {
+                return lastUpper;
+            }
+        };
+        const hasRa1 = ra1First || ra1Last;
+        const hasRa2 = ra2First || ra2Last;
+        
+        let introNameStr = "";
+        let actionNameStr = "";
+        if (hasRa1 && !hasRa2) {
+            introNameStr = formatName(ra1First, ra1Last, ra1Role, true);
+            actionNameStr = ra1Last ? ra1Last.toUpperCase() : "LAST";
+        } else if (hasRa1 && hasRa2) {
+            // Modified: Concatenation
+            const ra1Full = formatName(ra1First, ra1Last, ra1Role, true);
+            const ra2Full = formatName(ra2First, ra2Last, ra2Role, true);
+            introNameStr = ra1Full + " and " + ra2Full;
+            
+            const ra1Short = ra1Last ? ra1Last.toUpperCase() : "LAST1";
+            const ra2Short = ra2Last ? ra2Last.toUpperCase() : "LAST2";
+            actionNameStr = ra1Short + " and " + ra2Short;
+        } else {
+            introNameStr = "LAST, First (Resident Advisor)";
+            actionNameStr = "LAST";
+        }
+        // Resident Name
+        let studentMentioned = false;
+        
+        const getStudentName = () => {
+            // Modified: Concatenation
+            const role = "Resident " + (room || 'ROOM');
+            if (!studentMentioned) {
+                studentMentioned = true;
+                return formatName(resFirst, resLast, role, true);
+            } else {
+                return resLast ? resLast.toUpperCase() : "STUDENT";
+            }
+        };
+        // --- 3. Build Text ---
+        // Modified: Concatenation instead of Template Literals to allow safe embedding in Deno
+        let text = "On or about " + dateFormatted + " at or around " + timeFormatted + ", at SAIT Residence " + towerName + " (" + address + "). " + introNameStr + " discovered that " + (room || 'BEG-XXXX-X') + " window was open.\n\n";
+        // Step 1: Phone
+        if (timePhone) {
+            let noteStr = "";
+            if (notePhone === "answered") noteStr = "the student answered and closed the window";
+            else if (notePhone === "closed") noteStr = "the student closed the window";
+            else noteStr = "the student did not answer";
+            
+            let callerStr = "";
+            if (step1Last) {
+                callerStr = formatName(step1First, step1Last, step1Role || "Staff", true);
+            } else {
+                 callerStr = actionNameStr; 
+            }
+            
+            text += "- " + callerStr + " reached out to " + getStudentName() + " by phone to have them close the window at " + formatTime(timePhone) + ". (" + noteStr + ")\n\n";
+        }
+        // Step 2: Knock
+        if (timeKnock) {
+            let knockTarget = "the door";
+            if (typeKnock === "suite") knockTarget = "the suite door";
+            else if (typeKnock === "bedroom") knockTarget = "the bedroom door";
+            else if (typeKnock === "both") knockTarget = "the suite door and bedroom door";
+            let noteStr = "";
+            if (noteKnock === "answered") noteStr = "Student answered and closed the window";
+            else noteStr = "Student didn't response";
+            text += "- " + actionNameStr + " went to " + getStudentName() + "'s room and knocked three times on " + knockTarget + " at " + formatTime(timeKnock) + ". (" + noteStr + ")\n\n";
+        }
+        // Step 3: Entry
+        if (timeEntry) {
+            text += "- " + actionNameStr + " entered " + getStudentName() + "'s suite and closed the window at " + formatTime(timeEntry) + ". (" + (noteEntry || "Observation: Student not present") + ")\n\n";
+        }
+        // Temp
+        if (temp) {
+            text += "- Outside temperature was " + temp + " degrees at time of window check";
+        } else {
+            text += "- Outside temperature was XX degrees at time of window check";
+        }
+        outputContent.innerText = text;
+    }
+});
+    </script>
+</body>
+</html>
