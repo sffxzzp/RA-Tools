@@ -156,7 +156,7 @@ IC #3 - LAST, First (Resident BEG-0000-A)
                 if(subTypeSel) {
                     subTypeSel.classList.remove('disabled', 'ui-disabled');
                     subTypeSel.removeAttribute('disabled');
-                    subTypeSel.value = 3;
+                    subTypeSel.value = 4;
                     triggerChange(subTypeSel);
                 }
             }, 1000);
