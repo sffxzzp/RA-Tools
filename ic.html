@@ -529,6 +529,214 @@ On or about {{ date }} at or around {{ time }}HRS, at SAIT Residence {{ building
             return template.replace(/\{\{\s*(.*?)\s*\}\}/g, (match, key) => data[key] !== undefined ? data[key] : `[Missing: ${key}]`);
         }
 
+        function getTemplateHeader(template) {
+            return template.split(/\r?\n/).slice(0, 2).join("\n");
+        }
+
+        function normalizeText(value) {
+            return String(value || '')
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+        }
+
+        function normalizeNameKey(value) {
+            return normalizeText(value).replace(/\s+/g, '');
+        }
+
+        function getNameTokens(value) {
+            return normalizeText(value).split(/\s+/).filter(Boolean).slice(0, 2);
+        }
+
+        function getTokenPrefix(token) {
+            return token ? token.slice(0, Math.min(3, token.length)) : '';
+        }
+
+        function normalizeRoom(value) {
+            const raw = String(value || '').toUpperCase().trim();
+            if (!raw) return null;
+
+            const compact = raw.replace(/[^A-Z0-9]/g, '');
+            const compactMatch = compact.match(/(\d{3,4})([A-Z])?$/);
+            if (compactMatch) {
+                return {
+                    number: String(parseInt(compactMatch[1], 10)),
+                    suffix: compactMatch[2] || ''
+                };
+            }
+
+            const spaced = raw.replace(/[^A-Z0-9]+/g, ' ');
+            const spacedMatch = spaced.match(/(\d{3,4})(?:\s+([A-Z]))?$/);
+            if (!spacedMatch) return null;
+
+            return {
+                number: String(parseInt(spacedMatch[1], 10)),
+                suffix: spacedMatch[2] || ''
+            };
+        }
+
+        function roomsMatch(residentRoom, icRoom) {
+            if (!residentRoom || !icRoom) return 0;
+            if (residentRoom.number !== icRoom.number) return 0;
+            if (residentRoom.suffix && icRoom.suffix) {
+                return residentRoom.suffix === icRoom.suffix ? 60 : 0;
+            }
+            return 45;
+        }
+
+        function getICNameHeader() {
+            return icHeaders[4] || '';
+        }
+
+        function getICPrimaryNameValue(row) {
+            const header = getICNameHeader();
+            if (header && row[header] !== undefined) {
+                const primaryValue = String(row[header] || '').trim();
+                if (primaryValue) return primaryValue;
+            }
+
+            const fallbackEntry = Object.entries(row).find(([key, value]) => {
+                const normalized = normalizeText(key);
+                return String(value || '').trim() && (
+                    normalized.includes('introduce yourself') ||
+                    normalized.includes('full name') ||
+                    normalized.includes('briefly introduce yourself') ||
+                    normalized === 'name' ||
+                    key.includes('名称')
+                );
+            });
+            if (fallbackEntry) return String(fallbackEntry[1]).trim();
+
+            const keys = Object.keys(row);
+            const fallbackKey = keys[4];
+            return fallbackKey ? String(row[fallbackKey] || '').trim() : '';
+        }
+
+        function headerLooksLikeRoom(header) {
+            const normalized = normalizeText(header);
+            if (!normalized || normalized.includes('roommate')) return false;
+            return normalized.includes('room number') || normalized === 'room' || normalized.startsWith('room ');
+        }
+
+        function getICRoomValue(row) {
+            const roomEntry = Object.entries(row).find(([key, value]) => {
+                return headerLooksLikeRoom(key) && String(value || '').trim();
+            });
+            return roomEntry ? String(roomEntry[1]).trim() : '';
+        }
+
+        function namePrefixMatches(icNameValue, residentFirst, residentLast) {
+            const icTokens = getNameTokens(icNameValue);
+            if (icTokens.length === 0) return false;
+
+            const first = normalizeText(residentFirst);
+            const last = normalizeText(residentLast);
+            const fullForward = normalizeNameKey(`${residentFirst} ${residentLast}`);
+            const fullReverse = normalizeNameKey(`${residentLast} ${residentFirst}`);
+
+            return icTokens.some(token => {
+                const prefix = getTokenPrefix(token);
+                if (!prefix) return false;
+
+                return (
+                    (first && first.startsWith(prefix)) ||
+                    (last && last.startsWith(prefix)) ||
+                    (fullForward && fullForward.startsWith(prefix)) ||
+                    (fullReverse && fullReverse.startsWith(prefix))
+                );
+            });
+        }
+
+        function primaryTokenMatches(icNameValue, residentFirst, residentLast) {
+            const primaryToken = getNameTokens(icNameValue)[0] || '';
+            const prefix = getTokenPrefix(primaryToken);
+            if (!prefix) return false;
+
+            const first = normalizeText(residentFirst);
+            const last = normalizeText(residentLast);
+            const fullForward = normalizeNameKey(`${residentFirst} ${residentLast}`);
+            const fullReverse = normalizeNameKey(`${residentLast} ${residentFirst}`);
+
+            return (
+                (first && first.startsWith(prefix)) ||
+                (last && last.startsWith(prefix)) ||
+                (fullForward && fullForward.startsWith(prefix)) ||
+                (fullReverse && fullReverse.startsWith(prefix))
+            );
+        }
+
+        function lastNameMatches(icNameValue, residentLast) {
+            const last = normalizeText(residentLast);
+            if (!last) return false;
+
+            const tokens = getNameTokens(icNameValue);
+            const lastPrefix = getTokenPrefix(last);
+
+            return tokens.some(token => token === last || (lastPrefix && token.startsWith(lastPrefix)));
+        }
+
+        function findBestResidentMatch(icRow, residents, usedIndexes) {
+            const icNameValue = getICPrimaryNameValue(icRow);
+            const icRoomValue = getICRoomValue(icRow);
+            const icRoom = normalizeRoom(icRoomValue);
+            const available = residents
+                .map((row, index) => ({
+                    index,
+                    row
+                }))
+                .filter(candidate => !usedIndexes.has(candidate.index));
+
+            let nameCandidates = available.filter(candidate => {
+                const residentFirst = candidate.row['First Name'] || candidate.row['FirstName'] || '';
+                const residentLast = candidate.row['Last Name'] || candidate.row['LastName'] || '';
+                return namePrefixMatches(icNameValue, residentFirst, residentLast);
+            });
+
+            if (nameCandidates.length > 1) {
+                const narrowed = nameCandidates.filter(candidate => {
+                    const residentFirst = candidate.row['First Name'] || candidate.row['FirstName'] || '';
+                    const residentLast = candidate.row['Last Name'] || candidate.row['LastName'] || '';
+                    return primaryTokenMatches(icNameValue, residentFirst, residentLast);
+                });
+                if (narrowed.length > 0) nameCandidates = narrowed;
+            }
+
+            if (nameCandidates.length > 1) {
+                const narrowed = nameCandidates.filter(candidate => {
+                    const residentLast = candidate.row['Last Name'] || candidate.row['LastName'] || '';
+                    return lastNameMatches(icNameValue, residentLast);
+                });
+                if (narrowed.length > 0) nameCandidates = narrowed;
+            }
+
+            if (nameCandidates.length > 0) return nameCandidates[0];
+
+            let roomCandidates = available.filter(candidate => {
+                const residentRoom = normalizeRoom(candidate.row['Room'] || '');
+                return roomsMatch(residentRoom, icRoom) > 0;
+            });
+
+            if (roomCandidates.length > 1) {
+                const narrowed = roomCandidates.filter(candidate => {
+                    const residentLast = candidate.row['Last Name'] || candidate.row['LastName'] || '';
+                    return lastNameMatches(icNameValue, residentLast);
+                });
+                if (narrowed.length > 0) roomCandidates = narrowed;
+            }
+
+            if (roomCandidates.length === 0) return null;
+
+            roomCandidates.sort((a, b) => {
+                const roomA = normalizeRoom(a.row['Room'] || '');
+                const roomB = normalizeRoom(b.row['Room'] || '');
+                return roomsMatch(roomB, icRoom) - roomsMatch(roomA, icRoom);
+            });
+
+            return roomCandidates[0];
+        }
+
         // Generation Logic
         function extractCompletionTime(matchedIC) {
             if (!matchedIC) return null;
@@ -550,18 +758,26 @@ On or about {{ date }} at or around {{ time }}HRS, at SAIT Residence {{ building
             const tx2 = document.getElementById('template-attempt2').value;
             const tx3 = document.getElementById('template-attempt3').value;
 
-            const isFailed = (attemptDate) => attemptDate && (!completionDateObj || isNaN(completionDateObj) || completionDateObj > attemptDate);
+            const hasCompletion = completionDateObj && !isNaN(completionDateObj);
 
-            if (isFailed(a1.dateObj)) historyParts.push(renderTemplate(tx1, variables));
-            if (isFailed(a2.dateObj)) historyParts.push(renderTemplate(tx2, variables));
-            if (isFailed(a3.dateObj)) historyParts.push(renderTemplate(tx3, variables));
+            if (a2.dateObj && (!hasCompletion || completionDateObj > a2.dateObj)) {
+                historyParts.push(renderTemplate(tx1, variables));
+            }
+
+            if (a3.dateObj && (!hasCompletion || completionDateObj > a3.dateObj)) {
+                historyParts.push(renderTemplate(tx2, variables));
+            }
+
+            if (!hasCompletion && a3.dateObj) {
+                historyParts.push(renderTemplate(tx3, variables));
+            }
 
             return historyParts.join("\n");
         }
 
         function generateReports() {
-            if (cmData.length === 0) {
-                alert("Please upload Resident List (CM.csv) first.");
+            if (cmData.length === 0 || icData.length === 0) {
+                alert("Please upload both CM.csv and IC.csv first.");
                 return;
             }
 
@@ -579,8 +795,7 @@ On or about {{ date }} at or around {{ time }}HRS, at SAIT Residence {{ building
              }
 
             const templateMain = document.getElementById('template-main').value;
-            const templateNone = `{{ attempt3_full_date }} {{ attempt3_time }}HRS
-IC #3 - {{ resident_last }}, {{ resident_first }} (Resident {{ room }})
+            const templateNone = `${getTemplateHeader(templateMain)}
 
 {{ attempt_history }}
 
@@ -593,20 +808,21 @@ IC #3 - {{ resident_last }}, {{ resident_first }} (Resident {{ room }})
             ];
 
             let matchedCount = 0;
+            let unmatchedICCount = 0;
+            const usedResidentIndexes = new Set();
 
-            cmData.forEach(resident => {
-                const residentFirst = resident['First Name'] || resident['FirstName'] || '';
-                const residentLast = resident['Last Name'] || resident['LastName'] || '';
-                if (!residentFirst && !residentLast) return; 
+            icData.forEach(ic => {
+                const matchResult = findBestResidentMatch(ic, cmData, usedResidentIndexes);
+                const resident = matchResult ? matchResult.row : null;
+                const room = resident ? (resident['Room'] || 'Unknown') : (getICRoomValue(ic) || 'Unknown');
+                const icNameValue = getICPrimaryNameValue(ic) || 'Unknown Name';
 
-                const room = resident['Room'] || 'Unknown';
-                
-                // Flexible matching heuristic
-                const matchedIC = icData.find(ic => {
-                    const rowValues = Object.values(ic).join(' ').toLowerCase();
-                    return (residentFirst && rowValues.includes(residentFirst.toLowerCase().substring(0,4))) || 
-                           (residentLast && rowValues.includes(residentLast.toLowerCase().substring(0,5)));
-                });
+                if (matchResult) {
+                    usedResidentIndexes.add(matchResult.index);
+                }
+
+                const residentFirst = resident ? (resident['First Name'] || resident['FirstName'] || '') : icNameValue;
+                const residentLast = resident ? (resident['Last Name'] || resident['LastName'] || '') : 'UNMATCHED IC';
 
                 let variables = {
                     'resident_first': residentFirst,
@@ -627,31 +843,73 @@ IC #3 - {{ resident_last }}, {{ resident_first }} (Resident {{ room }})
                 };
 
                 let finalOutput = "";
-                const completionDateObj = extractCompletionTime(matchedIC);
-                
-                // Set success date variables if available
+                const completionDateObj = extractCompletionTime(ic);
+
                 if (completionDateObj) {
                     variables['date'] = completionDateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
                     variables['time'] = completionDateObj.getHours().toString().padStart(2, '0') + completionDateObj.getMinutes().toString().padStart(2, '0');
                 }
 
-                // Inject dynamic IC fields
-                if (matchedIC) {
-                    matchedCount++;
-                    for (const [key, value] of Object.entries(matchedIC)) {
-                        variables[key] = value;
-                    }
+                for (const [key, value] of Object.entries(ic)) {
+                    variables[key] = value;
                 }
 
-                // Generate history block
                 variables['attempt_history'] = buildAttemptHistory(variables, completionDateObj, attempts);
 
-                // Render final text
-                finalOutput = renderTemplate(matchedIC ? templateMain : templateNone, variables);
+                if (resident) {
+                    matchedCount++;
+                    finalOutput = renderTemplate(templateMain, variables);
+                } else {
+                    unmatchedICCount++;
+                    finalOutput = `[Unmatched IC Response]
+${variables['date']} ${variables['time']}HRS
+Name entered in IC: ${icNameValue}
+Room entered in IC: ${getICRoomValue(ic) || 'Unknown'}
+
+This IC response could not be matched to any resident in CM.csv.
+Please review this response manually before importing.
+`;
+                }
 
                 const card = document.createElement('div');
                 card.className = 'output-card';
+                if (!resident) {
+                    card.style.borderColor = 'var(--warning)';
+                }
                 card.textContent = finalOutput;
+                outputContainer.appendChild(card);
+            });
+
+            cmData.forEach((resident, index) => {
+                if (usedResidentIndexes.has(index)) return;
+
+                const residentFirst = resident['First Name'] || resident['FirstName'] || '';
+                const residentLast = resident['Last Name'] || resident['LastName'] || '';
+                if (!residentFirst && !residentLast) return;
+
+                const variables = {
+                    'resident_first': residentFirst,
+                    'resident_last': residentLast.toUpperCase(),
+                    'room': resident['Room'] || 'Unknown',
+                    'ra_first': raFirst,
+                    'ra_last': raLastUpper,
+                    'building_name': building,
+                    'date': 'Unknown Date',
+                    'time': 'Unknown Time',
+                    'attempt1_date': attempts[0].ordinalDate,
+                    'attempt1_time': attempts[0].time,
+                    'attempt2_date': attempts[1].ordinalDate,
+                    'attempt2_time': attempts[1].time,
+                    'attempt3_date': attempts[2].ordinalDate,
+                    'attempt3_time': attempts[2].time,
+                    'attempt3_full_date': attempts[2].fullDate
+                };
+
+                variables['attempt_history'] = buildAttemptHistory(variables, null, attempts);
+
+                const card = document.createElement('div');
+                card.className = 'output-card';
+                card.textContent = renderTemplate(templateNone, variables);
                 outputContainer.appendChild(card);
             });
 
@@ -660,7 +918,13 @@ IC #3 - {{ resident_last }}, {{ resident_first }} (Resident {{ room }})
             summary.style.color = 'var(--success)';
             summary.style.marginBottom = '1rem';
             summary.style.fontWeight = 'bold';
-            summary.textContent = `Processed ${cmData.length} residents. ${matchedCount} matched with form responses.`;
+            const unmatchedResidentCount = cmData.filter((resident, index) => {
+                if (usedResidentIndexes.has(index)) return false;
+                const residentFirst = resident['First Name'] || resident['FirstName'] || '';
+                const residentLast = resident['Last Name'] || resident['LastName'] || '';
+                return Boolean(residentFirst || residentLast);
+            }).length;
+            summary.textContent = `Processed ${icData.length} IC responses. ${matchedCount} matched to CM residents. ${unmatchedResidentCount} CM residents had no IC match. ${unmatchedICCount} IC responses require manual review.`;
             outputContainer.prepend(summary);
         }
 
